@@ -91,15 +91,17 @@ def valid_int(inputstring):
 
 class Base:
 
+	# Constants
+	open_mode_smart = 0
+	open_mode_fit = 1
+	open_mode_fit_width = 2
+	open_mode_fit_height = 3
+	open_mode_1to1 = 4
+	open_mode_last = 5
+	min_zoomratio = 0.02
+
 	def __init__(self):
 		gtk.gdk.threads_init()
-
-		# Constants
-		self.open_mode_smart = 0
-		self.open_mode_fit = 1
-		self.open_mode_1to1 = 2
-		self.open_mode_last = 3
-		self.min_zoomratio = 0.02
 
 		# Current image:
 		self.curr_img_in_list = 0
@@ -175,6 +177,8 @@ class Base:
 		
 		self.going_random = False
 		self.fullscreen_mode = False
+		self.scrollbar_size = 20
+		self.scrollbar_size_set = False
 		self.opendialogpath = ""
 		self.zoom_quality = gtk.gdk.INTERP_BILINEAR
 		self.recursive = False
@@ -256,6 +260,10 @@ class Base:
 
 		# Define the main menubar and toolbar:
 		self.iconfactory = gtk.IconFactory()
+		icon = gtk.gdk.pixbuf_new_from_file(self.find_path('stock_fit-width.png'))
+		self.iconfactory.add('fit-width', gtk.IconSet(icon))
+		icon = gtk.gdk.pixbuf_new_from_file(self.find_path('stock_fit-height.png'))
+		self.iconfactory.add('fit-height', gtk.IconSet(icon))
 		icon = gtk.gdk.pixbuf_new_from_file(self.find_path('stock_leave-fullscreen.png'))
 		self.iconfactory.add('leave-fullscreen', gtk.IconSet(icon))
 		icon = gtk.gdk.pixbuf_new_from_file(self.find_path('stock_fullscreen.png'))
@@ -300,6 +308,8 @@ class Base:
 			('In', gtk.STOCK_ZOOM_IN, _('Zoom _In'), '<Ctrl>Up', _('Zoom In'), self.zoom_in),
 			('Out', gtk.STOCK_ZOOM_OUT, _('Zoom _Out'), '<Ctrl>Down', _('Zoom Out'), self.zoom_out),
 			('Fit', gtk.STOCK_ZOOM_FIT, _('Zoom To _Fit'), '<Ctrl>1', _('Fit'), self.zoom_to_fit_window_action),
+			('Fit Width', 'fit-width', _('Zoom To Fit _Width'), '<Ctrl>2', _('Fit Width'), self.zoom_to_fit_width_window_action),
+			('Fit Height', 'fit-height', _('Zoom To Fit _Height'), '<Ctrl>3', _('Fit Height'), self.zoom_to_fit_height_window_action),
 			('1:1', gtk.STOCK_ZOOM_100, _('_1:1'), '<Ctrl>0', _('1:1'), self.zoom_1_to_1_action),
 			('Rotate Left', None, _('Rotate _Left'), '<Ctrl>Left', _('Rotate Left'), self.rotate_left),
 			('Rotate Right', None, _('Rotate _Right'), '<Ctrl>Right', _('Rotate Right'), self.rotate_right),
@@ -329,6 +339,8 @@ class Base:
 			('Ctrl-KP_Add', None, '', '<Ctrl>KP_Add', _('Zoom In'), self.zoom_in),
 			('Ctrl-KP_0', None, '', '<Ctrl>KP_0', _('Fit'), self.zoom_to_fit_window_action),
 			('Ctrl-KP_1', None, '', '<Ctrl>KP_1', _('1:1'), self.zoom_1_to_1_action),
+			('Ctrl-KP_2', None, '', '<Ctrl>KP_2', _('Fit Width'), self.zoom_to_fit_width_window_action),
+			('Ctrl-KP_3', None, '', '<Ctrl>KP_3', _('Fit Height'), self.zoom_to_fit_height_window_action),
 			('Full Screen Key', None, '', '<Shift>Return', None, self.enter_fullscreen),
 			('Prev', None, '', 'Up', _('Previous Image'), self.goto_prev_image),
 			('Next', None, '', 'Down', _('Next Image'), self.goto_next_image),
@@ -367,6 +379,8 @@ class Base:
 				<menuitem action="In"/>
 				<menuitem action="1:1"/>
 				<menuitem action="Fit"/>
+				<menuitem action="Fit Width"/>
+				<menuitem action="Fit Height"/>
 				<separator name="FM4"/>
 				<menuitem action="Start Slideshow"/>
 				<menuitem action="Stop Slideshow"/>
@@ -418,6 +432,8 @@ class Base:
 						<menuitem action="In"/>
 						<menuitem action="1:1"/>
 						<menuitem action="Fit"/>
+						<menuitem action="Fit Width"/>
+						<menuitem action="Fit Height"/>
 						<separator name="FM2"/>
 						<menuitem action="Toolbar"/>
 						<menuitem action="Thumbnails Pane"/>
@@ -456,6 +472,8 @@ class Base:
 						<menuitem action="Ctrl-KP_Add"/>
 						<menuitem action="Ctrl-KP_0"/>
 						<menuitem action="Ctrl-KP_1"/>
+						<menuitem action="Ctrl-KP_2"/>
+						<menuitem action="Ctrl-KP_3"/>
 						<menuitem action="Full Screen Key"/>
 						<menuitem action="Prev"/>
 						<menuitem action="Next"/>
@@ -481,6 +499,8 @@ class Base:
 					<toolitem action="In"/>
 					<toolitem action="1:1"/>
 					<toolitem action="Fit"/>
+					<toolitem action="Fit Width"/>
+					<toolitem action="Fit Height"/>
 				</toolbar>
 			</ui>
 			"""
@@ -1244,6 +1264,8 @@ class Base:
 		self.set_zoom_out_sensitivities(enable)
 		self.UIManager.get_widget('/MainMenu/ViewMenu/1:1').set_sensitive(enable)
 		self.UIManager.get_widget('/MainMenu/ViewMenu/Fit').set_sensitive(enable)
+		self.UIManager.get_widget('/MainMenu/ViewMenu/Fit Width').set_sensitive(enable)
+		self.UIManager.get_widget('/MainMenu/ViewMenu/Fit Height').set_sensitive(enable)
 		self.UIManager.get_widget('/MainMenu/EditMenu/Delete Image').set_sensitive(enable)
 		self.UIManager.get_widget('/MainMenu/EditMenu/Rename Image').set_sensitive(enable)
 		self.UIManager.get_widget('/MainMenu/EditMenu/Copy').set_sensitive(enable)
@@ -1252,8 +1274,12 @@ class Base:
 		self.UIManager.get_widget('/MainMenu/EditMenu/Saturation').set_sensitive(enable)
 		self.UIManager.get_widget('/MainToolbar/1:1').set_sensitive(enable)
 		self.UIManager.get_widget('/MainToolbar/Fit').set_sensitive(enable)
+		self.UIManager.get_widget('/MainToolbar/Fit Width').set_sensitive(enable)
+		self.UIManager.get_widget('/MainToolbar/Fit Height').set_sensitive(enable)
 		self.UIManager.get_widget('/Popup/1:1').set_sensitive(enable)
 		self.UIManager.get_widget('/Popup/Fit').set_sensitive(enable)
+		self.UIManager.get_widget('/Popup/Fit Width').set_sensitive(enable)
+		self.UIManager.get_widget('/Popup/Fit Height').set_sensitive(enable)
 		self.UIManager.get_widget('/MainMenu/FileMenu/Save As').set_sensitive(enable)
 		self.UIManager.get_widget('/MainMenu/FileMenu/Save').set_sensitive(False)
 		self.UIManager.get_widget('/MainMenu/FileMenu/Properties').set_sensitive(False)
@@ -1511,6 +1537,17 @@ class Base:
 			self.vscroll.show()
 		else:
 			self.vscroll.hide()
+
+		if not self.scrollbar_size_set:
+			rect = self.vscroll.get_allocation()
+			if rect.width > 1:
+				self.scrollbar_size = rect.width
+				self.scrollbar_size_set = True
+			else:
+				rect = self.hscroll.get_allocation()
+				if rect.height > 1:
+					self.scrollbar_size = rect.height
+					self.scrollbar_size_set = True
 
 	def center_image(self):
 		x_shift = int((self.available_image_width() - self.currimg.width)/2)
@@ -2483,6 +2520,8 @@ class Base:
 		combobox = gtk.combo_box_new_text()
 		combobox.append_text(_("Smart Mode"))
 		combobox.append_text(_("Zoom To Fit Mode"))
+		combobox.append_text(_("Zoom To Fit Width Mode"))
+		combobox.append_text(_("Zoom To Fit Height Mode"))
 		combobox.append_text(_("1:1 Mode"))
 		combobox.append_text(_("Last Active Mode"))
 		combobox.set_active(self.usettings['open_mode'])
@@ -3128,37 +3167,54 @@ class Base:
 			self.update_statusbar()
 
 	def zoom_to_fit_window_action(self, action):
-		self.zoom_to_fit_window(action, False, False)
+		self.zoom_to_fit_window(action, False, False, self.open_mode_fit)
 
-	def calc_ratio(self, img, ):
+	def zoom_to_fit_width_window_action(self, action):
+		self.zoom_to_fit_window(action, False, False, self.open_mode_fit_width)
+
+	def zoom_to_fit_height_window_action(self, action):
+		self.zoom_to_fit_window(action, False, False, self.open_mode_fit_height)
+
+	def calc_ratio(self, img, mode=open_mode_fit):
 		"""Calculate the ratio needed to fit the image in the view window"""
 		win_width = self.available_image_width()
 		win_height = self.available_image_height()
-		preimg_width = img.width_original
-		preimg_height = img.height_original
-		prewidth_ratio = float(preimg_width)/win_width
-		preheight_ratio = float(preimg_height)/win_height
-		if prewidth_ratio < preheight_ratio:
-			premax_ratio = preheight_ratio
-		else:
-			premax_ratio = prewidth_ratio
-		return 1/float(premax_ratio)
+		img_width = img.width_original
+		img_height = img.height_original
+		width_ratio = win_width / float(img_width)
+		height_ratio = win_height / float(img_height)
 
-	def zoom_to_fit_window(self, action, is_preloadimg_next, is_preloadimg_prev):
+		if mode == self.open_mode_fit_width:
+			if img_height * width_ratio > win_height:
+				return float(win_width - self.scrollbar_size) / img_width
+			return width_ratio
+
+		if mode == self.open_mode_fit_height:
+			if img_width * height_ratio > win_width:
+				return float(win_height - self.scrollbar_size) / img_height
+			return height_ratio
+
+		return min(width_ratio, height_ratio)
+
+	def zoom_to_fit_window(self, action, is_preloadimg_next, is_preloadimg_prev, mode=None):
+		if mode is None:
+			mode = self.usettings['last_mode']
+		else:
+			self.usettings['last_mode'] = mode
+
 		if is_preloadimg_next:
 			if self.usettings['preloading_images'] and self.nextimg.index != -1:
-				self.nextimg.zoomratio = self.calc_ratio(self.nextimg)
+				self.nextimg.zoomratio = self.calc_ratio(self.nextimg, mode)
 		elif is_preloadimg_prev:
 			if self.usettings['preloading_images'] and self.previmg.index != -1:
-				self.previmg.zoomratio = self.calc_ratio(self.previmg)
+				self.previmg.zoomratio = self.calc_ratio(self.previmg, mode)
 		else:
 			if self.currimg.isloaded and (self.slideshow_mode or self.UIManager.get_widget('/MainMenu/ViewMenu/Fit').get_property('sensitive')):
 				self.image_zoomed = True
-				self.usettings['last_mode'] = self.open_mode_fit
 				self.last_image_action_was_fit = True
 				self.last_image_action_was_smart_fit = False
 				# Calculate zoomratio needed to fit to window:
-				wanted_zoomratio = self.calc_ratio(self.currimg)
+				wanted_zoomratio = self.calc_ratio(self.currimg, mode)
 				self.set_zoom_sensitivities()
 				self.put_zoom_image_to_window(False, wanted_zoomratio)
 				self.update_statusbar()
@@ -3209,12 +3265,16 @@ class Base:
 				self.update_statusbar()
 
 	def zoom_check_and_execute(self,action, is_preloadimg_next, is_preloadimg_prev):
-		if self.usettings['open_mode'] == self.open_mode_smart or (self.usettings['open_mode'] == self.open_mode_last and self.usettings['last_mode'] == self.open_mode_smart):
+		mode = self.usettings['open_mode']
+		if mode == self.open_mode_last:
+			mode = self.usettings['last_mode']
+
+		if mode == self.open_mode_smart:
 			self.zoom_to_fit_or_1_to_1(action, is_preloadimg_next, is_preloadimg_prev)
-		elif self.usettings['open_mode'] == self.open_mode_fit or (self.usettings['open_mode'] == self.open_mode_last and self.usettings['last_mode'] == self.open_mode_fit):
-			self.zoom_to_fit_window(action, is_preloadimg_next, is_preloadimg_prev)
-		elif self.usettings['open_mode'] == self.open_mode_1to1 or (self.usettings['open_mode'] == self.open_mode_last and self.usettings['last_mode'] == self.open_mode_1to1):
+		elif mode == self.open_mode_1to1:
 			self.zoom_1_to_1(action, is_preloadimg_next, is_preloadimg_prev)
+		else:
+			self.zoom_to_fit_window(action, is_preloadimg_next, is_preloadimg_prev, mode)
 
 	def rotate_left(self, action):
 		self.rotate_left_or_right('/MainMenu/EditMenu/Rotate Left', 90)
@@ -4016,14 +4076,17 @@ class Base:
 			else:
 				self.set_image_sensitivities(False)
 			# If we used a preload image, set the correct boolean variables
-			if self.usettings['open_mode'] == self.open_mode_smart or (self.usettings['open_mode'] == self.open_mode_last and self.usettings['last_mode'] == self.open_mode_smart):
+			mode = self.usettings['open_mode']
+			if mode == self.open_mode_last:
+				mode = self.usettings['last_mode']
+			if mode == self.open_mode_smart:
 				self.last_image_action_was_fit = True
 				self.last_image_action_was_smart_fit = True
-			elif self.usettings['open_mode'] == self.open_mode_fit or (self.usettings['open_mode'] == self.open_mode_last and self.usettings['last_mode'] == self.open_mode_fit):
+			elif mode == self.open_mode_1to1:
+				self.last_image_action_was_fit = False
+			else:
 				self.last_image_action_was_fit = True
 				self.last_image_action_was_smart_fit = False
-			elif self.usettings['open_mode'] == self.open_mode_1to1 or (self.usettings['open_mode'] == self.open_mode_last and self.usettings['last_mode'] == self.open_mode_1to1):
-				self.last_image_action_was_fit = False
 		else:
 			# Need to load the current image
 			self.currimg.unload_pixbuf()
