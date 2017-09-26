@@ -5,7 +5,7 @@
 
 import os
 
-from distutils.core import setup, Extension
+from setuptools import setup, Extension
 
 # Create mo files:
 if not os.path.exists("mo/"):
