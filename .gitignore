@@ -1,6 +1,9 @@
+/build
+/dist
+/mo
+/env
 .dir-locals.el
 *.bak
-/env
-/test
+*.egg-info
 *.pyc
 __pycache__
